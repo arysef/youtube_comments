@@ -48,7 +48,8 @@ For more information about the client_secrets.json file format, please visit:
 https://developers.google.com/api-client-library/python/guide/aaa_client_secrets
 """ % os.path.abspath(os.path.join(os.path.dirname(__file__),
                                    CLIENT_SECRETS_FILE))
-
+list_of_comments = []
+sum_comments = 0
 # Authorize the request and store authorization credentials.
 def get_authenticated_service(args):
   flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_READ_WRITE_SSL_SCOPE,
@@ -68,22 +69,42 @@ def get_authenticated_service(args):
 
 
 # Call the API's commentThreads.list method to list the existing comment threads.
-def get_comment_threads(youtube, video_id):
-  results = youtube.commentThreads().list(
-    part="snippet",
-    videoId=video_id,
-    textFormat="plainText"
-  ).execute()
+def get_comment_threads(youtube, video_id, page_token):
+  
+  if page_token == "":
+    results = youtube.commentThreads().list(
+      part="snippet",
+      videoId=video_id,
+      textFormat="plainText",
+      maxResults="75",
+    ).execute()
 
-  """
+  else: 
+    results = youtube.commentThreads().list(
+      part="snippet",
+      videoId=video_id,
+      textFormat="plainText",
+      maxResults="75",
+      pageToken = page_token
+    ).execute()
+  count = 0
+  
   for item in results["items"]:
+    count += 1
     comment = item["snippet"]["topLevelComment"]
     author = comment["snippet"]["authorDisplayName"]
     text = comment["snippet"]["textDisplay"]
-    print "Comment by %s: %s" % (author, text)
-  """
-  print results["items"]
+    comment_id = comment["id"]
+    #print comment_id
+    get_comments(youtube, comment_id)
+    list_of_comments.append(text)
+    #print "Comment %s by %s: %s" % (count, author, text)
+  if "nextPageToken" in results:
+    get_comment_threads(youtube, video_id, results["nextPageToken"])
+
+  #print results["items"]
   return results["items"]
+
 
 
 # Call the API's comments.list method to list the existing comment replies.
@@ -97,7 +118,7 @@ def get_comments(youtube, parent_id):
   for item in results["items"]:
     author = item["snippet"]["authorDisplayName"]
     text = item["snippet"]["textDisplay"]
-    print "Comment by %s: %s" % (author, text)
+    list_of_comments.append(text)
 
   return results["items"]
 
@@ -178,7 +199,20 @@ if __name__ == "__main__":
     exit("Please specify text using the --text= parameter.")
 
   youtube = get_authenticated_service(args)
-  video_comment_threads = get_comment_threads(youtube, args.videoid)
+  video_comment_threads = get_comment_threads(youtube, args.videoid, "")
+  #parent_id = video_comment_threads[0]["id"]
+  #parent_id2 = video_comment_threads[1]["id"]
+
+  """
+  for num in range(len(video_comment_threads) - 1):
+    print "HERE IS AN INDEX WITH VALUES IN IT: {}".format(num)
+    parent_id = video_comment_threads[num]["id"]
+    video_comments = get_comments(youtube, parent_id)
+  """
+  
+  #video_comments = get_comments(youtube, parent_id)
+  print len(list_of_comments)
+  #video_comments2 = get_comments(youtube, parent_id2)
   #parent_id = video_comment_threads[0]["id"]
   #parent_id2 = video_comment_threads[1]["id"]
   #video_comments = get_comments(youtube, parent_id)
