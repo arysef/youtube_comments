@@ -6,6 +6,7 @@
 import httplib2
 import os
 import sys
+import time
 
 from apiclient.discovery import build_from_document
 from apiclient.errors import HttpError
@@ -69,42 +70,48 @@ def get_authenticated_service(args):
 
 
 # Call the API's commentThreads.list method to list the existing comment threads.
-def get_comment_threads(youtube, video_id, page_token):
-  
-  if page_token == "":
-    results = youtube.commentThreads().list(
-      part="snippet",
-      videoId=video_id,
-      textFormat="plainText",
-      maxResults="75",
-    ).execute()
-
-  else: 
-    results = youtube.commentThreads().list(
-      part="snippet",
-      videoId=video_id,
-      textFormat="plainText",
-      maxResults="75",
-      pageToken = page_token
-    ).execute()
+def get_comment_threads(youtube, video_id, gather_replies):
   count = 0
-  
-  for item in results["items"]:
-    count += 1
-    comment = item["snippet"]["topLevelComment"]
-    author = comment["snippet"]["authorDisplayName"]
-    text = comment["snippet"]["textDisplay"]
-    comment_id = comment["id"]
-    #print comment_id
-    get_comments(youtube, comment_id)
-    list_of_comments.append(text)
-    #print "Comment %s by %s: %s" % (count, author, text)
-  if "nextPageToken" in results:
-    get_comment_threads(youtube, video_id, results["nextPageToken"])
+  page_token = ""
+
+  while True:
+    if page_token == "":
+      results = youtube.commentThreads().list(
+        part="snippet",
+        videoId=video_id,
+        textFormat="plainText",
+        maxResults="75",
+      ).execute()
+
+    else: 
+      results = youtube.commentThreads().list(
+        part="snippet",
+        videoId=video_id,
+        textFormat="plainText",
+        maxResults="75",
+        pageToken = page_token
+      ).execute()
+
+    for item in results["items"]:
+      count += 1
+      comment = item["snippet"]["topLevelComment"]
+      author = comment["snippet"]["authorDisplayName"]
+      text = comment["snippet"]["textDisplay"]
+      reply_count = item["snippet"]["totalReplyCount"]
+      comment_id = comment["id"]
+      #print comment_id
+      if gather_replies and reply_count > 0:
+        get_comments(youtube, comment_id)
+      list_of_comments.append(text)
+      #print "Comment %s by %s: %s" % (count, author, text)
+
+    if "nextPageToken" in results:
+      page_token = results["nextPageToken"]
+    else: 
+      break
 
   #print results["items"]
   return results["items"]
-
 
 
 # Call the API's comments.list method to list the existing comment replies.
@@ -183,7 +190,6 @@ def delete_comment(youtube, comment):
 
   print "%s deleted succesfully" % (comment["id"])
 
-
 if __name__ == "__main__":
   # The "videoid" option specifies the YouTube video ID that uniquely
   # identifies the video for which the comment will be inserted.
@@ -195,11 +201,15 @@ if __name__ == "__main__":
 
   if not args.videoid:
     exit("Please specify videoid using the --videoid= parameter.")
-  if not args.text:
-    exit("Please specify text using the --text= parameter.")
 
   youtube = get_authenticated_service(args)
-  video_comment_threads = get_comment_threads(youtube, args.videoid, "")
+
+  start_iter = time.time()
+  video_comment_threads = get_comment_threads(youtube, args.videoid, False)
+  end_iter = time.time()
+  print list_of_comments
+  print len(list_of_comments)
+  print "Iterative method used {} seconds".format(end_iter - start_iter)
   #parent_id = video_comment_threads[0]["id"]
   #parent_id2 = video_comment_threads[1]["id"]
 
@@ -211,25 +221,44 @@ if __name__ == "__main__":
   """
   
   #video_comments = get_comments(youtube, parent_id)
-  print len(list_of_comments)
-  #video_comments2 = get_comments(youtube, parent_id2)
-  #parent_id = video_comment_threads[0]["id"]
-  #parent_id2 = video_comment_threads[1]["id"]
-  #video_comments = get_comments(youtube, parent_id)
-  #video_comments = get_comments(youtube, parent_id2)
-  # All the available methods are used in sequence just for the sake of an example.
-  """
-  try:
-    video_comment_threads = get_comment_threads(youtube, args.videoid)
-    parent_id = video_comment_threads[0]["id"]
-    insert_comment(youtube, parent_id, args.text)
-    video_comments = get_comments(youtube, parent_id)
-    update_comment(youtube, video_comments[0])
-    set_moderation_status(youtube, video_comments[0])
-    mark_as_spam(youtube, video_comments[0])
-    delete_comment(youtube, video_comments[0])
-  except HttpError, e:
-    print "An HTTP error %d occurred:\n%s" % (e.resp.status, e.content)
-  else:
-    print "Inserted, listed, updated, moderated, marked and deleted comments."  
-  """
+
+
+"""
+def get_comment_threads(youtube, video_id, page_token, gather_replies):
+  
+  if page_token == "":
+    results = youtube.commentThreads().list(
+      part="snippet",
+      videoId=video_id,
+      textFormat="plainText",
+      maxResults="75",
+    ).execute()
+
+  else: 
+    results = youtube.commentThreads().list(
+      part="snippet",
+      videoId=video_id,
+      textFormat="plainText",
+      maxResults="75",
+      pageToken = page_token
+    ).execute()
+  count = 0
+  
+  for item in results["items"]:
+    count += 1
+    comment = item["snippet"]["topLevelComment"]
+    author = comment["snippet"]["authorDisplayName"]
+    text = comment["snippet"]["textDisplay"]
+    reply_count = item["snippet"]["totalReplyCount"]
+    comment_id = comment["id"]
+    #print comment_id
+    if gather_replies and reply_count > 0:
+      get_comments(youtube, comment_id)
+    list_of_comments.append(text)
+    #print "Comment %s by %s: %s" % (count, author, text)
+  if "nextPageToken" in results:
+    get_comment_threads(youtube, video_id, results["nextPageToken"], gather_replies)
+
+  #print results["items"]
+  return results["items"]
+"""
