@@ -7,6 +7,11 @@ import httplib2
 import os
 import sys
 import time
+import argparse
+
+from google.cloud import language
+from google.cloud.language import enums
+from google.cloud.language import types
 
 from apiclient.discovery import build_from_document
 from apiclient.errors import HttpError
@@ -190,28 +195,94 @@ def delete_comment(youtube, comment):
 
   print "%s deleted succesfully" % (comment["id"])
 
+def print_result(annotations):
+    score = annotations.document_sentiment.score
+    magnitude = annotations.document_sentiment.magnitude
+
+    for index, sentence in enumerate(annotations.sentences):
+        sentence_sentiment = sentence.sentiment.score
+        print('Sentence {} has a sentiment score of {}'.format(
+            index, sentence_sentiment))
+
+    print('Overall Sentiment: score of {} with magnitude of {}'.format(
+        score, magnitude))
+    return 0
+
+
+def analyze(movie_review_filename):
+    """Run a sentiment analysis request on text within a passed filename."""
+    client = language.LanguageServiceClient()
+
+    with open(movie_review_filename, 'r') as review_file:
+        # Instantiates a plain text document.
+        content = review_file.read()
+
+    document = types.Document(
+        content=content,
+        type=enums.Document.Type.PLAIN_TEXT)
+    annotations = client.analyze_sentiment(document=document)
+
+    # Print the results
+    print_result(annotations)
+
 if __name__ == "__main__":
-  # The "videoid" option specifies the YouTube video ID that uniquely
-  # identifies the video for which the comment will be inserted.
+  """
+  parser = argparse.ArgumentParser(
+    description=__doc__,
+    formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser.add_argument(
+    'movie_review_filename',
+    help='The filename of the movie review you\'d like to analyze.')
+  args = parser.parse_args()
+  analyze(args.movie_review_filename)
+
+  """
+  # Instantiates a client``
+  client = language.LanguageServiceClient()
+
+  # The text to analyze
+  
   argparser.add_argument("--videoid",
     help="Required; ID for video for which the comment will be inserted.")
   # The "text" option specifies the text that will be used as comment.
-  argparser.add_argument("--text", help="Required; text that will be used as comment.")
+  #argparser.add_argument("--text", help="Required; text that will be used as comment.")
   args = argparser.parse_args()
-
+  
+  
   if not args.videoid:
     exit("Please specify videoid using the --videoid= parameter.")
 
   youtube = get_authenticated_service(args)
 
+
+
+  #Can be used as an example of how to gather comments
+
   start_iter = time.time()
-  video_comment_threads = get_comment_threads(youtube, args.videoid, False)
+  video_comment_threads = get_comment_threads(youtube, args.videoid, True)
   end_iter = time.time()
   print list_of_comments
   print len(list_of_comments)
   print "Iterative method used {} seconds".format(end_iter - start_iter)
   #parent_id = video_comment_threads[0]["id"]
   #parent_id2 = video_comment_threads[1]["id"]
+  sentiment_sum = 0 
+  total_comments = len(list_of_comments)
+  for item in list_of_comments:
+
+    text = item
+    document = types.Document(
+        content=text,
+        type=enums.Document.Type.PLAIN_TEXT)
+
+    # Detects the sentiment of the text
+    sentiment = client.analyze_sentiment(document=document).document_sentiment
+
+    #print('Text: {}'.format(text))
+    sentiment_value = sentiment.score * sentiment.magnitude
+    print('Sentiment: {}, {}'.format(sentiment.score, sentiment.magnitude))
+    sentiment_sum += sentiment_value
+  print "Average positivity of the comments in this video is: {}".format(sentiment_sum / total_comments)
 
   """
   for num in range(len(video_comment_threads) - 1):
